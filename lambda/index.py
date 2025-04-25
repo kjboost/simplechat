@@ -5,7 +5,7 @@ import os
 #import re  # 正規表現モジュールをインポート
 #from botocore.exceptions import ClientError
 import urllib.request
-import urlib.error
+import urllib.error
 
 COLAB_API_URL = os.environ.get("COLAB_API_URL", "https://2c24-34-169-203-111.ngrok-free.app")
 
