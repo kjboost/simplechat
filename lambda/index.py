@@ -1,61 +1,39 @@
 # lambda/index.py
 import json
-import os
-#import boto3
-#import re  # 正規表現モジュールをインポート
-#from botocore.exceptions import ClientError
 import urllib.request
-import urllib.error
 
-COLAB_API_URL = "https://4e8f-35-198-242-151.ngrok-free.app/generate"
+# Colab上で公開されたFastAPIのエンドポイント
+FASTAPI_ENDPOINT = "https://xxxxx.ngrok-free.app/generate"  # ←ここは自分のURLに差し替え！
 
 def lambda_handler(event, context):
     try:
-        
         print("Received event:", json.dumps(event))
         
-        # Cognitoで認証されたユーザー情報を取得
-        user_info = None
-        if 'requestContext' in event and 'authorizer' in event['requestContext']:
-            user_info = event['requestContext']['authorizer']['claims']
-            print(f"Authenticated user: {user_info.get('email') or user_info.get('cognito:username')}")
-        
-        # リクエストボディの解析
+        # リクエストボディを取得
         body = json.loads(event['body'])
         message = body['message']
+        conversation_history = body.get('conversationHistory', [])
 
-        
-        print("Processing message:", message)
-           
-
-        ###
-        # --- ★ Colab API を呼び出す処理 ---
-
-        # APIに送るデータを作成 
-        api_payload = {
-            "prompt": message,
-            "max_new_tokens": 512,
-            "do_sample": True,
-            "temperature": 0.7,
-            "top_p": 0.9
+        # FastAPIサーバに送信するデータ
+        payload = {
+            "message": message,
+            "conversationHistory": conversation_history
         }
-        api_request_data = json.dumps(api_payload).encode('utf-8')
-
-        # リクエストを作成
-        headers = {'Content-Type': 'application/json'}
-        req = urllib.request.Request(COLAB_API_URL, data=api_request_data, method='POST', headers=headers)
-
-        # API呼び出し
-        with urllib.request.urlopen(req) as res:
-             result = json.loads(res.read())
-        # --- ▲ Colab API 呼び出し処理 ---
-
-
-        print("Successfully processed.") # 処理成功ログを追加
-
-
         
-        # 成功レスポンスの返却
+        # urllibを使ってPOSTリクエスト送信
+        req = urllib.request.Request(
+            FASTAPI_ENDPOINT,
+            data=json.dumps(payload).encode('utf-8'),
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req) as res:
+            response_body = res.read()
+            response_json = json.loads(response_body.decode('utf-8'))
+        
+        print("Response from FastAPI:", json.dumps(response_json))
+        
+        # 成功レスポンス返却
         return {
             "statusCode": 200,
             "headers": {
@@ -64,14 +42,11 @@ def lambda_handler(event, context):
                 "Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
                 "Access-Control-Allow-Methods": "OPTIONS,POST"
             },
-            "body": json.dumps({
-                "success": True,
-                "response": result["generated_text"]
-            })
+            "body": json.dumps(response_json)
         }
         
-    except Exception as error:
-        print("Error:", str(error))
+    except Exception as e:
+        print("Error:", str(e))
         
         return {
             "statusCode": 500,
@@ -83,14 +58,9 @@ def lambda_handler(event, context):
             },
             "body": json.dumps({
                 "success": False,
-                "error": str(error)
+                "error": str(e)
             })
         }
-
-
-
-
-
 
 
 # # lambda/index.py
