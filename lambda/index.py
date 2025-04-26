@@ -7,7 +7,7 @@ import os
 import urllib.request
 import urllib.error
 
-COLAB_API_URL = "https://d4de-35-233-254-79.ngrok-free.app/generate"
+COLAB_API_URL = "https://25f1-44-195-69-149.ngrok-free.app/generate"
 
 def lambda_handler(event, context):
     try:
