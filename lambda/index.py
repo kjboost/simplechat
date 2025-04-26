@@ -3,7 +3,7 @@ import json
 import urllib.request
 
 # Colab上で公開されたFastAPIのエンドポイント
-FASTAPI_ENDPOINT = "https://xxxxx.ngrok-free.app/generate"  # ←ここは自分のURLに差し替え！
+FASTAPI_ENDPOINT = "https://8afa-34-16-140-14.ngrok-free.app/generate"  # ←ここは自分のURLに差し替え！
 
 def lambda_handler(event, context):
     try:
