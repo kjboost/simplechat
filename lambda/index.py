@@ -1,39 +1,84 @@
 # lambda/index.py
 import json
+import os
 import urllib.request
+from urllib.error import HTTPError, URLError
+import re
 
-# Colab上で公開されたFastAPIのエンドポイント
-FASTAPI_ENDPOINT = "https://8afa-34-16-140-14.ngrok-free.app/generate"  # ←ここは自分のURLに差し替え！
+# --- ユーティリティ関数 ---
+
+def extract_region_from_arn(arn: str) -> str:
+    """Lambda ARNからリージョンを抽出"""
+    match = re.search(r'arn:aws:lambda:([^:]+):', arn)
+    return match.group(1) if match else "us-east-1"
+
+def build_prompt(conversation_history: list, user_message: str) -> str:
+    """会話履歴とユーザーの最新メッセージからプロンプトを組み立て"""
+    prompt = ""
+    for msg in conversation_history:
+        role = msg.get("role")
+        content = msg.get("content")
+        if role == "user":
+            prompt += f"ユーザー: {content}\n"
+        elif role == "assistant":
+            prompt += f"アシスタント: {content}\n"
+    prompt += f"ユーザー: {user_message}\nアシスタント:"
+    return prompt
+
+def send_request_to_model_api(model_api_url: str, prompt: str) -> dict:
+    """モデルAPIにリクエストを送り、レスポンスを返す"""
+    payload = {
+        "prompt": prompt,
+        "max_new_tokens": 100,
+        "do_sample": True,
+        "temperature": 0.7,
+        "top_p": 0.9
+    }
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(model_api_url, data=data, method="POST")
+    req.add_header("Content-Type", "application/json")
+    req.add_header("Accept", "application/json")
+
+    with urllib.request.urlopen(req) as res:
+        response_data = res.read()
+        return json.loads(response_data.decode("utf-8"))
+
+# --- メインハンドラ ---
+
+MODEL_API_URL = os.environ.get("MODEL_API_URL", "https://xxxxx.ngrok-free.app/generate")
 
 def lambda_handler(event, context):
     try:
         print("Received event:", json.dumps(event))
-        
-        # リクエストボディを取得
+
+        user_info = None
+        if 'requestContext' in event and 'authorizer' in event['requestContext']:
+            user_info = event['requestContext']['authorizer']['claims']
+            print(f"Authenticated user: {user_info.get('email') or user_info.get('cognito:username')}")
+
         body = json.loads(event['body'])
         message = body['message']
         conversation_history = body.get('conversationHistory', [])
+        print("User message:", message)
 
-        # FastAPIサーバに送信するデータ
-        payload = {
-            "message": message,
-            "conversationHistory": conversation_history
-        }
-        
-        # urllibを使ってPOSTリクエスト送信
-        req = urllib.request.Request(
-            FASTAPI_ENDPOINT,
-            data=json.dumps(payload).encode('utf-8'),
-            headers={"Content-Type": "application/json"},
-            method="POST"
-        )
-        with urllib.request.urlopen(req) as res:
-            response_body = res.read()
-            response_json = json.loads(response_body.decode('utf-8'))
-        
-        print("Response from FastAPI:", json.dumps(response_json))
-        
-        # 成功レスポンス返却
+        prompt = build_prompt(conversation_history, message)
+
+        print("Sending request to custom model API")
+        try:
+            response_json = send_request_to_model_api(MODEL_API_URL, prompt)
+        except HTTPError as e:
+            raise Exception(f"Model API error: {e.code}, {e.read().decode('utf-8')}")
+        except URLError as e:
+            raise Exception(f"Failed to reach server: {e.reason}")
+
+        assistant_response = response_json.get("generated_text", "")
+
+        # 会話履歴を更新
+        updated_conversation_history = conversation_history + [
+            {"role": "user", "content": message},
+            {"role": "assistant", "content": assistant_response}
+        ]
+
         return {
             "statusCode": 200,
             "headers": {
@@ -42,12 +87,15 @@ def lambda_handler(event, context):
                 "Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
                 "Access-Control-Allow-Methods": "OPTIONS,POST"
             },
-            "body": json.dumps(response_json)
+            "body": json.dumps({
+                "success": True,
+                "response": assistant_response,
+                "conversationHistory": updated_conversation_history
+            })
         }
-        
-    except Exception as e:
-        print("Error:", str(e))
-        
+
+    except Exception as error:
+        print("Error:", str(error))
         return {
             "statusCode": 500,
             "headers": {
@@ -58,7 +106,7 @@ def lambda_handler(event, context):
             },
             "body": json.dumps({
                 "success": False,
-                "error": str(e)
+                "error": str(error)
             })
         }
 
