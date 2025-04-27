@@ -1,51 +1,24 @@
 # lambda/index.py
 import json
 import os
+import boto3
+import re
+from botocore.exceptions import ClientError
 import urllib.request
 from urllib.error import HTTPError, URLError
-import re
 
-# --- ユーティリティ関数 ---
+# Lambda コンテキストからリージョンを抽出する関数
+def extract_region_from_arn(arn):
+    match = re.search('arn:aws:lambda:([^:]+):', arn)
+    if match:
+        return match.group(1)
+    return "us-east-1"
 
-def extract_region_from_arn(arn: str) -> str:
-    """Lambda ARNからリージョンを抽出"""
-    match = re.search(r'arn:aws:lambda:([^:]+):', arn)
-    return match.group(1) if match else "us-east-1"
+bedrock_client = None
 
-def build_prompt(conversation_history: list, user_message: str) -> str:
-    """会話履歴とユーザーの最新メッセージからプロンプトを組み立て"""
-    prompt = ""
-    for msg in conversation_history:
-        role = msg.get("role")
-        content = msg.get("content")
-        if role == "user":
-            prompt += f"ユーザー: {content}\n"
-        elif role == "assistant":
-            prompt += f"アシスタント: {content}\n"
-    prompt += f"ユーザー: {user_message}\nアシスタント:"
-    return prompt
+## Fast API を使う時    
 
-def send_request_to_model_api(model_api_url: str, prompt: str) -> dict:
-    """モデルAPIにリクエストを送り、レスポンスを返す"""
-    payload = {
-        "prompt": prompt,
-        "max_new_tokens": 100,
-        "do_sample": True,
-        "temperature": 0.7,
-        "top_p": 0.9
-    }
-    data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(model_api_url, data=data, method="POST")
-    req.add_header("Content-Type", "application/json")
-    req.add_header("Accept", "application/json")
-
-    with urllib.request.urlopen(req) as res:
-        response_data = res.read()
-        return json.loads(response_data.decode("utf-8"))
-
-# --- メインハンドラ ---
-
-MODEL_API_URL = os.environ.get("MODEL_API_URL", "https://da0d-34-16-175-238.ngrok-free.app/generate")
+MODEL_API_URL = os.environ.get("MODEL_API_URL", "https://c7a2-34-138-10-164.ngrok-free.app/generate")
 
 def lambda_handler(event, context):
     try:
@@ -61,23 +34,42 @@ def lambda_handler(event, context):
         conversation_history = body.get('conversationHistory', [])
         print("User message:", message)
 
-        prompt = build_prompt(conversation_history, message)
+        prompt = ""
+        for msg in conversation_history:
+            role = msg["role"]
+            content = msg["content"]
+            if role == "user":
+                prompt += f"ユーザー: {content}\n"
+            elif role == "assistant":
+                prompt += f"アシスタント: {content}\n"
+        prompt += f"ユーザー: {message}\nアシスタント:"
+
+        payload = {
+            "prompt": prompt,
+            "max_new_tokens": 100,
+            "do_sample": True,
+            "temperature": 0.7,
+            "top_p": 0.9
+        }
 
         print("Sending request to custom model API")
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(MODEL_API_URL, data=data, method="POST")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("Accept", "application/json")
+
         try:
-            response_json = send_request_to_model_api(MODEL_API_URL, prompt)
+            with urllib.request.urlopen(req) as res:
+                response_data = json.loads(res.read().decode("utf-8"))
         except HTTPError as e:
             raise Exception(f"Model API error: {e.code}, {e.read().decode('utf-8')}")
         except URLError as e:
             raise Exception(f"Failed to reach server: {e.reason}")
 
-        assistant_response = response_json.get("generated_text", "")
+        assistant_response = response_data["generated_text"]
 
-        # 会話履歴を更新
-        updated_conversation_history = conversation_history + [
-            {"role": "user", "content": message},
-            {"role": "assistant", "content": assistant_response}
-        ]
+        conversation_history.append({"role": "user", "content": message})
+        conversation_history.append({"role": "assistant", "content": assistant_response})
 
         return {
             "statusCode": 200,
@@ -90,7 +82,7 @@ def lambda_handler(event, context):
             "body": json.dumps({
                 "success": True,
                 "response": assistant_response,
-                "conversationHistory": updated_conversation_history
+                "conversationHistory": conversation_history
             })
         }
 
