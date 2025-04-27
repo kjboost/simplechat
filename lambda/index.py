@@ -45,7 +45,7 @@ def send_request_to_model_api(model_api_url: str, prompt: str) -> dict:
 
 # --- メインハンドラ ---
 
-MODEL_API_URL = os.environ.get("MODEL_API_URL", "https://xxxxx.ngrok-free.app/generate")
+MODEL_API_URL = os.environ.get("MODEL_API_URL", "https://da0d-34-16-175-238.ngrok-free.app/generate")
 
 def lambda_handler(event, context):
     try:
