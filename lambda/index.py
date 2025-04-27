@@ -18,7 +18,7 @@ bedrock_client = None
 
 ## Fast API を使う時    
 
-MODEL_API_URL = os.environ.get("MODEL_API_URL", "https://c7a2-34-138-10-164.ngrok-free.app/generate")
+MODEL_API_URL = os.environ.get("MODEL_API_URL", "https://5662-34-124-165-102.ngrok-free.app/generate")
 
 def lambda_handler(event, context):
     try:
