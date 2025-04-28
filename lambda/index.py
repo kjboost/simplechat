@@ -6,7 +6,7 @@ import boto3
 from botocore.exceptions import ClientError
 import urllib.request
 
-API_URL = "https://a324-34-169-195-23.ngrok-free.app/generate"
+API_URL = "https://2ea9-34-126-113-254.ngrok-free.app/generate"
 N_TURNS = 5
 
 def lambda_handler(event, context):
