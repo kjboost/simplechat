@@ -6,7 +6,7 @@ import boto3
 from botocore.exceptions import ClientError
 import urllib.request
 
-API_URL = "https://c0bb-34-16-219-150.ngrok-free.app/generate"
+API_URL = "https://2d67-34-125-235-214.ngrok-free.app/generate"
 N_TURNS = 5  # ユーザー+アシスタントを合わせたターン数（ここでは直近5ターン分を保持）
 
 def lambda_handler(event, context):
