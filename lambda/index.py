@@ -1,5 +1,5 @@
 # lambda/index.py
-# lambda/index.py
+
 import json
 import os
 import boto3
@@ -7,7 +7,7 @@ from botocore.exceptions import ClientError
 import urllib.request
 
 API_URL = "https://c0bb-34-16-219-150.ngrok-free.app/generate"
-N_TURNS = 5
+N_TURNS = 5  # ユーザー+アシスタントを合わせたターン数（ここでは直近5ターン分を保持）
 
 def lambda_handler(event, context):
     try:
@@ -26,22 +26,28 @@ def lambda_handler(event, context):
 
         print("Processing message:", message)
 
-        # 会話履歴を使用
+        # 会話履歴を使う
         messages = conversation_history.copy()
 
-        contexts = [msg['content'] for msg in messages[-N_TURNS:]]
+        # 新しいユーザーメッセージを履歴に追加
+        messages.append({
+            "role": "user",
+            "content": message
+        })
 
-        # プロンプトを組み立て
-        if contexts:
-            context_text = "\nPretend that you knew about the following context:\n" + "\n>>".join(contexts)
-            prompt = message + "\n" + context_text
-        else:
-            prompt = message
+        # プロンプト組み立て（チャット履歴をそのまま文字列化する）
+        prompt_parts = []
+        for msg in messages[-N_TURNS*2:]:  # user+assistantで1ターンなので2倍取る
+            if msg['role'] == 'user':
+                prompt_parts.append(f"ユーザー: {msg['content']}")
+            elif msg['role'] == 'assistant':
+                prompt_parts.append(f"アシスタント: {msg['content']}")
+
+        prompt = "\n".join(prompt_parts)
 
         print("Prompt: ", prompt)
 
         # --- ここからAPIリクエストを作って飛ばす
-        
         data = json.dumps({
             "prompt": prompt,
             "max_new_tokens": 512,
@@ -61,19 +67,13 @@ def lambda_handler(event, context):
             response_body = json.loads(res.read())
 
         assistant_response = response_body["generated_text"]
-        
-        # ユーザーメッセージを追加
-        messages.append({
-            "role": "user",
-            "content": message
-        })
 
         # アシスタントの応答を会話履歴に追加
         messages.append({
             "role": "assistant",
             "content": assistant_response
         })
-        
+
         # 成功レスポンスの返却
         return {
             "statusCode": 200,
