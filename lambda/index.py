@@ -30,11 +30,18 @@ def lambda_handler(event, context):
         messages = conversation_history.copy()
 
         contexts = [msg['content'] for msg in messages[-N_TURNS:]]
-        if len(contexts) > 0:
-            prompt += "Pretend that you knew about the following context: \n" + "\n>>".join(contexts) 
+
+        # プロンプトを組み立て
+        if contexts:
+            context_text = "\nPretend that you knew about the following context:\n" + "\n>>".join(contexts)
+            prompt = message + "\n" + context_text
+        else:
+            prompt = message
 
         print("Prompt: ", prompt)
 
+        # --- ここからAPIリクエストを作って飛ばす
+        
         data = json.dumps({
             "prompt": prompt,
             "max_new_tokens": 512,
